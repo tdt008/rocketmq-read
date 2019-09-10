@@ -894,7 +894,7 @@ public class BrokerController {
             @Override
             public void run() {
                 try {
-                    // Broker会每隔30s向NameSrv更新自身topic信息
+                    // Broker会每隔30s向NameSrv注册并更新自身topic信息
                     BrokerController.this.registerBrokerAll(true, false, brokerConfig.isForceRegister());
                 } catch (Throwable e) {
                     log.error("registerBrokerAll Exception", e);
@@ -929,9 +929,13 @@ public class BrokerController {
         doRegisterBrokerAll(true, false, topicConfigSerializeWrapper);
     }
 
+    // true false true
     public synchronized void registerBrokerAll(final boolean checkOrderConfig, boolean oneway, boolean forceRegister) {
+        // ConcurrentMap<String, TopicConfig> topicConfigTable
+        // 将topicConfigTable封装到TopicConfigSerializeWrapper中
         TopicConfigSerializeWrapper topicConfigWrapper = this.getTopicConfigManager().buildTopicConfigSerializeWrapper();
 
+        // 判断权限如果为不可读或不可写那么久在拼装一下topicConfigTable到TopicConfigSerializeWrapper中
         if (!PermName.isWriteable(this.getBrokerConfig().getBrokerPermission())
             || !PermName.isReadable(this.getBrokerConfig().getBrokerPermission())) {
             ConcurrentHashMap<String, TopicConfig> topicConfigTable = new ConcurrentHashMap<String, TopicConfig>();
@@ -944,11 +948,15 @@ public class BrokerController {
             topicConfigWrapper.setTopicConfigTable(topicConfigTable);
         }
 
+        // forceRegister是否强制注册
+        // needRegister方法是与配置的每个NameServer进行通信，判断topicConfigTable是否改变了，只要其中一个改变了那么久需要发起注册
+        // QUERY_DATA_VERSION = 322;
         if (forceRegister || needRegister(this.brokerConfig.getBrokerClusterName(),
-            this.getBrokerAddr(),
-            this.brokerConfig.getBrokerName(),
-            this.brokerConfig.getBrokerId(),
-            this.brokerConfig.getRegisterBrokerTimeoutMills())) {
+                this.getBrokerAddr(),
+                this.brokerConfig.getBrokerName(),
+                this.brokerConfig.getBrokerId(),
+                this.brokerConfig.getRegisterBrokerTimeoutMills())) {
+            // REGISTER_BROKER = 103;
             doRegisterBrokerAll(checkOrderConfig, oneway, topicConfigWrapper);
         }
     }
@@ -970,10 +978,14 @@ public class BrokerController {
         if (registerBrokerResultList.size() > 0) {
             RegisterBrokerResult registerBrokerResult = registerBrokerResultList.get(0);
             if (registerBrokerResult != null) {
+                // 根据updateMasterHAServerAddrPeriodically标注位（在初始化时若Broker的配置文件中没有haMasterAddress参数配置，则标记为true，表示注册之后需要更新主用Broker地址）
+                // 以及NameServer返回的HaServerAddr地址是否为空，若标记位是true且返回的HaServerAddr不为空，则用HaServerAddr地址更新HAService.HAClient.masterAddress的值；
+                // 该HAClient.masterAddress值用于主备Broker之间的commitlog数据同步之用
                 if (this.updateMasterHAServerAddrPeriodically && registerBrokerResult.getHaServerAddr() != null) {
                     this.messageStore.updateHaMasterAddress(registerBrokerResult.getHaServerAddr());
                 }
 
+                // 用NameServer返回的MasterAddr值更新SlaveSynchronize.masterAddr值，用于主备Broker同步Config文件使用；
                 this.slaveSynchronize.setMasterAddr(registerBrokerResult.getMasterAddr());
 
                 if (checkOrderConfig) {

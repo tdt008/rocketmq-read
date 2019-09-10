@@ -259,12 +259,12 @@ public class BrokerOuterAPI {
     }
 
     public List<Boolean> needRegister(
-        final String clusterName,
-        final String brokerAddr,
-        final String brokerName,
-        final long brokerId,
-        final TopicConfigSerializeWrapper topicConfigWrapper,
-        final int timeoutMills) {
+            final String clusterName,
+            final String brokerAddr,
+            final String brokerName,
+            final long brokerId,
+            final TopicConfigSerializeWrapper topicConfigWrapper,
+            final int timeoutMills) {
         final List<Boolean> changedList = new CopyOnWriteArrayList<>();
         List<String> nameServerAddressList = this.remotingClient.getNameServerAddressList();
         if (nameServerAddressList != null && nameServerAddressList.size() > 0) {

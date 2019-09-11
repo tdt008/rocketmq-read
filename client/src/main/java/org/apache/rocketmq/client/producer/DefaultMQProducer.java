@@ -70,6 +70,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     /**
      * Producer group conceptually aggregates all producer instances of exactly same role, which is particularly
      * important when transactional messages are involved.
+     * 消息生产者组，消息服务器在回查事物状态时会随机选择该组中任何一个生产者发起事物回查请求
      * </p>
      *
      * For non-transactional messages, it does not matter as long as it's unique per process.
@@ -80,21 +81,25 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     private String producerGroup;
 
     /**
+     * 默认topicKey
      * Just for testing or demo program
      */
     private String createTopicKey = MixAll.AUTO_CREATE_TOPIC_KEY_TOPIC;
 
     /**
+     * 默认主题在每一个broker队列数量
      * Number of queues to create per default topic.
      */
     private volatile int defaultTopicQueueNums = 4;
 
     /**
+     * 发送消息默认超时时间，3秒
      * Timeout for sending messages.
      */
     private int sendMsgTimeout = 3000;
 
     /**
+     * 消息体超过该值则启用压缩，默认4K
      * Compress message body threshold, namely, message body larger than 4k will be compressed on default.
      */
     private int compressMsgBodyOverHowmuch = 1024 * 4;
@@ -103,6 +108,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * Maximum number of retry to perform internally before claiming sending failure in synchronous mode.
      * </p>
      *
+     * 同步方式发送消息重试次数，默认为2，总共执行3次
      * This may potentially cause message duplication which is up to application developers to resolve.
      */
     private int retryTimesWhenSendFailed = 2;
@@ -110,17 +116,19 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     /**
      * Maximum number of retry to perform internally before claiming sending failure in asynchronous mode.
      * </p>
-     *
+     * 步异方式发送消息重试次数，默认为2
      * This may potentially cause message duplication which is up to application developers to resolve.
      */
     private int retryTimesWhenSendAsyncFailed = 2;
 
     /**
+     * 消息重试时选择另外一个broker时，是否不等待存储结果就返回，默认为false
      * Indicate whether to retry another broker on sending failure internally.
      */
     private boolean retryAnotherBrokerWhenNotStoreOK = false;
 
     /**
+     * 允许发送的最大消息长度，默认为4M，该值最大值为2^32-1
      * Maximum allowed message size in bytes.
      */
     private int maxMessageSize = 1024 * 1024 * 4; // 4M

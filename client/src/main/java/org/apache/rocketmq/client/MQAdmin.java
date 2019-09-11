@@ -42,7 +42,7 @@ public interface MQAdmin {
      * @param key accesskey
      * @param newTopic topic name
      * @param queueNum topic's queue number
-     * @param topicSysFlag topic system flag
+     * @param topicSysFlag topic system flag 主题系统标签，默认为0
      */
     void createTopic(String key, String newTopic, int queueNum, int topicSysFlag)
         throws MQClientException;
@@ -50,6 +50,7 @@ public interface MQAdmin {
     /**
      * Gets the message queue offset according to some time in milliseconds<br>
      * be cautious to call because of more IO overhead
+     *  根据时间戳从队列中查找其偏移量
      *
      * @param mq Instance of MessageQueue
      * @param timestamp from when in milliseconds.
@@ -59,6 +60,7 @@ public interface MQAdmin {
 
     /**
      * Gets the max offset
+     * 查找该消息队列中最大的物理偏移量
      *
      * @param mq Instance of MessageQueue
      * @return the max offset
@@ -67,6 +69,7 @@ public interface MQAdmin {
 
     /**
      * Gets the minimum offset
+     * 查找该消息队列中最小的物理偏移量
      *
      * @param mq Instance of MessageQueue
      * @return the minimum offset
@@ -83,7 +86,7 @@ public interface MQAdmin {
 
     /**
      * Query message according to message id
-     *
+     *  根据消息偏移量查找消息
      * @param offsetMsgId message id
      * @return message
      */
@@ -92,18 +95,22 @@ public interface MQAdmin {
 
     /**
      * Query messages
+     * 根据条件查询消息
      *
-     * @param topic message topic
-     * @param key message key index word
-     * @param maxNum max message number
-     * @param begin from when
-     * @param end to when
+     * @param topic message topic 消息主题
+     * @param key message key index word 消息索引字段
+     * @param maxNum max message number 本次最多取出消息条数
+     * @param begin from when 开始时间
+     * @param end to when 结束时间
      * @return Instance of QueryResult
      */
     QueryResult queryMessage(final String topic, final String key, final int maxNum, final long begin,
         final long end) throws MQClientException, InterruptedException;
 
     /**
+     *
+     * 根据主题与消息ID查找消息
+     *
      * @return The {@code MessageExt} of given msgId
      */
     MessageExt viewMessage(String topic,

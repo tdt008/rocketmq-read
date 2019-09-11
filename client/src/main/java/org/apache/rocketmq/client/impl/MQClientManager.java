@@ -44,6 +44,14 @@ public class MQClientManager {
         return getAndCreateMQClientInstance(clientConfig, null);
     }
 
+    /**
+     * @description 创建一个MQClientInstance实例
+     * @param clientConfig
+     * @param rpcHook
+     * @return org.apache.rocketmq.client.impl.factory.MQClientInstance
+     * @author qrc
+     * @date 2019/9/11
+     */
     public MQClientInstance getAndCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
         String clientId = clientConfig.buildMQClientId();
         MQClientInstance instance = this.factoryTable.get(clientId);
@@ -51,6 +59,8 @@ public class MQClientManager {
             instance =
                 new MQClientInstance(clientConfig.cloneClientConfig(),
                     this.factoryIndexGenerator.getAndIncrement(), clientId, rpcHook);
+            // ConcurrentMap<String/* clientId */, MQClientInstance> factoryTable
+            // 维护一个缓存表，也就是同一个clientId只会创建一个MQClientInstance
             MQClientInstance prev = this.factoryTable.putIfAbsent(clientId, instance);
             if (prev != null) {
                 instance = prev;

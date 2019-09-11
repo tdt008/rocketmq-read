@@ -178,6 +178,7 @@ public class MQClientInstance {
             List<QueueData> qds = route.getQueueDatas();
             Collections.sort(qds);
             for (QueueData qd : qds) {
+                // 循环遍历路由信息的QueueData信息，如果队列没有写权限则遍历下一个QueueData
                 if (PermName.isWriteable(qd.getPerm())) {
                     BrokerData brokerData = null;
                     for (BrokerData bd : route.getBrokerDatas()) {
@@ -191,6 +192,7 @@ public class MQClientInstance {
                         continue;
                     }
 
+                    // 根据brokerName查找brokerData，如果找不到或者找到的不是Master节点，则遍历下一个
                     if (!brokerData.getBrokerAddrs().containsKey(MixAll.MASTER_ID)) {
                         continue;
                     }
@@ -629,6 +631,7 @@ public class MQClientInstance {
                     }
                     if (topicRouteData != null) {
                         TopicRouteData old = this.topicRouteTable.get(topic);
+                        // 如果路由信息找到，与本地缓存中的路由信息进行对比，判断路由信息是否发生了改变，如果未发生改变，则直接返回false
                         boolean changed = topicRouteDataIsChange(old, topicRouteData);
                         if (!changed) {
                             changed = this.isNeedUpdateTopicRouteInfo(topic);
@@ -644,6 +647,7 @@ public class MQClientInstance {
                             }
 
                             // Update Pub info
+                            // 更新MQCliengInstance broker地址缓存表
                             {
                                 TopicPublishInfo publishInfo = topicRouteData2TopicPublishInfo(topic, topicRouteData);
                                 publishInfo.setHaveTopicRouterInfo(true);

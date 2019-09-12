@@ -1,2 +1,2 @@
 # rocketmq-read
-rocketmq阅读
+rocketmq阅读并添加注释，version: rocketmq4.5.2

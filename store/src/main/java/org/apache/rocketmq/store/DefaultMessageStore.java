@@ -61,31 +61,43 @@ import org.apache.rocketmq.store.stats.BrokerStatsManager;
 
 public class DefaultMessageStore implements MessageStore {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
-
+    
+    /** 消息存储配置属性 */
     private final MessageStoreConfig messageStoreConfig;
+    
     // CommitLog
+    /** CommitLog文件的存储实现类 */
     private final CommitLog commitLog;
 
+    /** 消息队列存储缓存表，按消息主题分组 */
     private final ConcurrentMap<String/* topic */, ConcurrentMap<Integer/* queueId */, ConsumeQueue>> consumeQueueTable;
 
+    /** 消息队列文件ConsumeQueue刷盘线程 */
     private final FlushConsumeQueueService flushConsumeQueueService;
 
+    /** 清除CommitLog文件服务接口类 */
     private final CleanCommitLogService cleanCommitLogService;
 
+    /** 清除ConsumeQueue文件服务接口类 */
     private final CleanConsumeQueueService cleanConsumeQueueService;
 
+    /** 索引文件实现类 */
     private final IndexService indexService;
 
+    /** MappedFile分配线程 */
     private final AllocateMappedFileService allocateMappedFileService;
 
+    /** CommitLog消息分发线程，根据CommitLog文件构建ConsumeQueue、IndexFile文件 */
     private final ReputMessageService reputMessageService;
 
+    /** 高可用机制 */
     private final HAService haService;
 
     private final ScheduleMessageService scheduleMessageService;
 
     private final StoreStatsService storeStatsService;
 
+    /** 消息堆内存缓存 */
     private final TransientStorePool transientStorePool;
 
     private final RunningFlags runningFlags = new RunningFlags();
@@ -94,15 +106,21 @@ public class DefaultMessageStore implements MessageStore {
     private final ScheduledExecutorService scheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("StoreScheduledThread"));
     private final BrokerStatsManager brokerStatsManager;
+    
+    /** 消息拉去长轮询模式消息到达监听器 */
     private final MessageArrivingListener messageArrivingListener;
+    
+    /** broker配置 */
     private final BrokerConfig brokerConfig;
 
     private volatile boolean shutdown = true;
 
+    /** 文件刷盘检测 点 */
     private StoreCheckpoint storeCheckpoint;
 
     private AtomicLong printTimes = new AtomicLong(0);
 
+    /** CommitLog文件转发请求 */
     private final LinkedList<CommitLogDispatcher> dispatcherList;
 
     private RandomAccessFile lockFile;
@@ -360,12 +378,21 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /**
+     * @description 消息存储入口
+     * @param msg
+     * @return org.apache.rocketmq.store.PutMessageResult
+     * @author qrc
+     * @date 2019/9/12
+     */
     public PutMessageResult putMessage(MessageExtBrokerInner msg) {
+        // 如果当前broker已经shutdown，则拒绝写入
         if (this.shutdown) {
             log.warn("message store has shutdown, so putMessage is forbidden");
             return new PutMessageResult(PutMessageStatus.SERVICE_NOT_AVAILABLE, null);
         }
 
+        // 如果当前Borker角色为slave，则拒绝写入
         if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) {
             long value = this.printTimes.getAndIncrement();
             if ((value % 50000) == 0) {
@@ -375,6 +402,7 @@ public class DefaultMessageStore implements MessageStore {
             return new PutMessageResult(PutMessageStatus.SERVICE_NOT_AVAILABLE, null);
         }
 
+        // 当前broker是否可写，不可写入则拒绝写入
         if (!this.runningFlags.isWriteable()) {
             long value = this.printTimes.getAndIncrement();
             if ((value % 50000) == 0) {
@@ -386,11 +414,13 @@ public class DefaultMessageStore implements MessageStore {
             this.printTimes.set(0);
         }
 
+        // 如果消息主题长度超过127，则拒绝写入
         if (msg.getTopic().length() > Byte.MAX_VALUE) {
             log.warn("putMessage message topic length too long " + msg.getTopic().length());
             return new PutMessageResult(PutMessageStatus.MESSAGE_ILLEGAL, null);
         }
 
+        // 如果消息属性超过32767个，则拒绝写入
         if (msg.getPropertiesString() != null && msg.getPropertiesString().length() > Short.MAX_VALUE) {
             log.warn("putMessage message properties length too long " + msg.getPropertiesString().length());
             return new PutMessageResult(PutMessageStatus.PROPERTIES_SIZE_EXCEEDED, null);
@@ -401,6 +431,7 @@ public class DefaultMessageStore implements MessageStore {
         }
 
         long beginTime = this.getSystemClock().now();
+        // 写消息
         PutMessageResult result = this.commitLog.putMessage(msg);
 
         long elapsedTime = this.getSystemClock().now() - beginTime;
@@ -416,6 +447,13 @@ public class DefaultMessageStore implements MessageStore {
         return result;
     }
 
+    /**
+     * @description 批量消息存储入口
+     * @param messageExtBatch
+     * @return org.apache.rocketmq.store.PutMessageResult
+     * @author qrc
+     * @date 2019/9/12
+     */
     public PutMessageResult putMessages(MessageExtBatch messageExtBatch) {
         if (this.shutdown) {
             log.warn("DefaultMessageStore has shutdown, so putMessages is forbidden");

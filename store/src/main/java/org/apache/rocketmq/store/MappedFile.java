@@ -200,10 +200,14 @@ public class MappedFile extends ReferenceResource {
         assert messageExt != null;
         assert cb != null;
 
+        // 当前写入位置指针
         int currentPos = this.wrotePosition.get();
 
+        // 如果currentPos大于等于文件大小，则表明文件已写满抛出AppendMessageStatus.UNKNOWN_ERROR
         if (currentPos < this.fileSize) {
+            // 通过slice方法创建一个与原ByteBuffer共享的内存区，但是拥有独立的position、limit、capacity等
             ByteBuffer byteBuffer = writeBuffer != null ? writeBuffer.slice() : this.mappedByteBuffer.slice();
+            // 设置position为当前currentPos值
             byteBuffer.position(currentPos);
             AppendMessageResult result;
             if (messageExt instanceof MessageExtBrokerInner) {

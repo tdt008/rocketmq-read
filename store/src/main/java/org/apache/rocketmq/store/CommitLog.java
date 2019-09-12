@@ -551,6 +551,8 @@ public class CommitLog {
         if (tranType == MessageSysFlag.TRANSACTION_NOT_TYPE
             || tranType == MessageSysFlag.TRANSACTION_COMMIT_TYPE) {
             // Delay Delivery
+            // 如果消息的延迟级别大于0
+            // 将消息的原主题名称与原消息队列ID存入消息属性中，用延迟消息主题SCHEDULE_TOPIC、消息队列id更新原来消息的主题与队列
             if (msg.getDelayTimeLevel() > 0) {
                 if (msg.getDelayTimeLevel() > this.defaultMessageStore.getScheduleMessageService().getMaxDelayLevel()) {
                     msg.setDelayTimeLevel(this.defaultMessageStore.getScheduleMessageService().getMaxDelayLevel());
@@ -571,8 +573,12 @@ public class CommitLog {
 
         long elapsedTimeInLock = 0;
         MappedFile unlockMappedFile = null;
+        // 获取当前可以写入的CommitLog文件
+        // CommitLog存储路径${ROCKETMQ_HOME}/store/commitlog,每个文件默认大小1G，
+        // 一个文件写满后再创建一个文件，以该文件的第一个偏移量为文件名，偏移量小于20位用0补齐
         MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile();
 
+        // 加锁
         putMessageLock.lock(); //spin or ReentrantLock ,depending on store config
         try {
             long beginLockTimestamp = this.defaultMessageStore.getSystemClock().now();
@@ -580,8 +586,10 @@ public class CommitLog {
 
             // Here settings are stored timestamp, in order to ensure an orderly
             // global
+            // 设置消息存储时间
+            // 如果MappedFile为空，表面${ROCKETMQ_HOMT}/store/commitlog目录下不存在任何文件，说明本次消息是第一次消息发送，用偏移量0创建第一个commit文件
+            // 后面如果文件创建失败抛出CREATE_MAPEDFILE_FAILED状态
             msg.setStoreTimestamp(beginLockTimestamp);
-
             if (null == mappedFile || mappedFile.isFull()) {
                 mappedFile = this.mappedFileQueue.getLastMappedFile(0); // Mark: NewFile may be cause noise
             }
@@ -591,7 +599,9 @@ public class CommitLog {
                 return new PutMessageResult(PutMessageStatus.CREATE_MAPEDFILE_FAILED, null);
             }
 
+            // 写入
             result = mappedFile.appendMessage(msg, this.appendMessageCallback);
+
             switch (result.getStatus()) {
                 case PUT_OK:
                     break;

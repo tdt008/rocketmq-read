@@ -29,12 +29,23 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
 
     private final ThreadLocalIndex whichItemWorst = new ThreadLocalIndex();
 
+    /**
+     * @description 更新失败条目
+     * @param name brkerNamer
+     * @param currentLatency 消息发送故障延迟时间
+     * @param notAvailableDuration  不可用持续时间，在这个时间内，broker将被规避
+     * @return void
+     * @author qrc
+     * @date 2019/9/12
+     */
     @Override
     public void updateFaultItem(final String name, final long currentLatency, final long notAvailableDuration) {
+        // 从本地缓存获取，找到则更新，找不到则新建
         FaultItem old = this.faultItemTable.get(name);
         if (null == old) {
             final FaultItem faultItem = new FaultItem(name);
             faultItem.setCurrentLatency(currentLatency);
+            // 当前系统时间 + 需要规避的时长
             faultItem.setStartTimestamp(System.currentTimeMillis() + notAvailableDuration);
 
             old = this.faultItemTable.putIfAbsent(name, faultItem);
@@ -48,6 +59,13 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         }
     }
 
+    /**
+     * @description 判断broker是否可用
+     * @param name broker名称
+     * @return boolean
+     * @author qrc
+     * @date 2019/9/12
+     */
     @Override
     public boolean isAvailable(final String name) {
         final FaultItem faultItem = this.faultItemTable.get(name);
@@ -57,11 +75,25 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         return true;
     }
 
+    /**
+     * @description 移除Fault条目，意味着Broker重新参与路由计算
+     * @param name
+     * @return void
+     * @author qrc
+     * @date 2019/9/12
+     */
     @Override
     public void remove(final String name) {
         this.faultItemTable.remove(name);
     }
 
+    /**
+     * @description 尝试从规避的broker中选择一个可用的broker，如果没有找到，将返回null
+     * @param
+     * @return T
+     * @author qrc
+     * @date 2019/9/12
+     */
     @Override
     public String pickOneAtLeast() {
         final Enumeration<FaultItem> elements = this.faultItemTable.elements();
@@ -97,8 +129,11 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
     }
 
     class FaultItem implements Comparable<FaultItem> {
+        /** 条目唯一键值，这里为brokerName */
         private final String name;
+        /** 本次消息发送延迟 */
         private volatile long currentLatency;
+        /** 故障规避开始时间 */
         private volatile long startTimestamp;
 
         public FaultItem(final String name) {

@@ -35,15 +35,21 @@ public class MappedFileQueue {
 
     private static final int DELETE_FILES_BATCH_MAX = 10;
 
+    // 存储目录
     private final String storePath;
 
+    // 单个文件的存储大小
     private final int mappedFileSize;
 
+    // MappedFile文件集合
     private final CopyOnWriteArrayList<MappedFile> mappedFiles = new CopyOnWriteArrayList<MappedFile>();
 
+    // 创建MappedFile服务类
     private final AllocateMappedFileService allocateMappedFileService;
 
+    // 当前刷盘指针，表示该指针之前的所有数据全部持久化到磁盘
     private long flushedWhere = 0;
+    // 当前数据提交指针，内存中ByteBuffer当前的写指针，该值大于等于flushedWhere
     private long committedWhere = 0;
 
     private volatile long storeTimestamp = 0;
@@ -74,12 +80,19 @@ public class MappedFileQueue {
         }
     }
 
+    /**
+     * @description 根据消息存储时间戳来查找MappedFile
+     * @param timestamp
+     * @return org.apache.rocketmq.store.MappedFile
+     * @author qrc
+     * @date 2019/9/19
+     */
     public MappedFile getMappedFileByTime(final long timestamp) {
         Object[] mfs = this.copyMappedFiles(0);
 
         if (null == mfs)
             return null;
-
+        // 遍历：根据最后一次更新时间大于待查找时间戳的文件，如果不存在则返回最后一个
         for (int i = 0; i < mfs.length; i++) {
             MappedFile mappedFile = (MappedFile) mfs[i];
             if (mappedFile.getLastModifiedTimestamp() >= timestamp) {
@@ -454,6 +467,7 @@ public class MappedFileQueue {
 
     /**
      * Finds a mapped file by offset.
+     *  根据消息偏移量offset查找MappedFile
      *
      * @param offset Offset.
      * @param returnFirstOnNotFound If the mapped file is not found, then return the first one.

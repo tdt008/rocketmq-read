@@ -298,6 +298,13 @@ public class MappedFileQueue {
         return true;
     }
 
+    /**
+     * @description 获取存储文件最小偏移量
+     * @param
+     * @return long
+     * @author qrc
+     * @date 2019/9/20
+     */
     public long getMinOffset() {
 
         if (!this.mappedFiles.isEmpty()) {
@@ -312,9 +319,17 @@ public class MappedFileQueue {
         return -1;
     }
 
+    /**
+     * @description 获取存储文件最大偏移量
+     * @param
+     * @return long
+     * @author qrc
+     * @date 2019/9/20
+     */
     public long getMaxOffset() {
         MappedFile mappedFile = getLastMappedFile();
         if (mappedFile != null) {
+            // 最后一个MappedFile文件的fileFromOffset加上当前写指针位置
             return mappedFile.getFileFromOffset() + mappedFile.getReadPosition();
         }
         return 0;

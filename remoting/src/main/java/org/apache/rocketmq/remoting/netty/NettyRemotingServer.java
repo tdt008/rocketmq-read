@@ -110,6 +110,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
             @Override
             public Thread newThread(Runnable r) {
+                // 线程名称：NettyServerPublicExecutor_
                 return new Thread(r, "NettyServerPublicExecutor_" + this.threadIndex.incrementAndGet());
             }
         });

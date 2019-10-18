@@ -18,15 +18,31 @@ package org.apache.rocketmq.remoting.netty;
 
 public class NettyServerConfig implements Cloneable {
     private int listenPort = 8888;
+    /**
+     * 业务线程池的线程个数.RocketMQ 按任务类型，每个任务类型会拥有一个专门的线程池，比如发送消息，消费消息，
+     * 另外再加一个其他线程池（默认的业务线程池）。默认业务线程池，采用 fixed 类型，其线程名称：RemotingExecutorThread_
+     * 作用范围：该参数目前主要用于 NameServer 的默认业务线程池，处理诸如 broker、producer,consume 与 NameServer 的所有交互命令。
+     * */
     private int serverWorkerThreads = 8;
+    /** Netty public 任务线程池个数。 */
     private int serverCallbackExecutorThreads = 0;
+    /** Netty IO线程个数， Selector所在的线程个数，也就是主从Reactor模型中的从Reactor线程数量 */
     private int serverSelectorThreads = 3;
+
+    /** 单向（Oneway）发送特点为只负责发送消息，不等待服务器回应且没有回调函数触发，即只发送请求不等待应答。
+    应用场景：适用于某些耗时非常短，但对可靠性要求并不高的场景，例如日志收集。 */
+    /** 服务端 oneWay(单向执行)、异步调用的信号量（并发度） */
     private int serverOnewaySemaphoreValue = 256;
     private int serverAsyncSemaphoreValue = 64;
+
+    /** 通道空闲时间，默认120S, 通过Netty的IdleStateHandler实现 */
     private int serverChannelMaxIdleTimeSeconds = 120;
 
+    /** socket发送缓存区大小 */
     private int serverSocketSndBufSize = NettySystemConfig.socketSndbufSize;
+    /** socket接收缓存区大小 */
     private int serverSocketRcvBufSize = NettySystemConfig.socketRcvbufSize;
+    /** 是否使用PooledByteBuf(可重用，缓存ByteBuf) */
     private boolean serverPooledByteBufAllocatorEnable = true;
 
     /**

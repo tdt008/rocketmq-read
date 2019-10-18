@@ -44,18 +44,28 @@ import org.apache.rocketmq.common.protocol.route.QueueData;
 import org.apache.rocketmq.common.protocol.route.TopicRouteData;
 import org.apache.rocketmq.common.sysflag.TopicSysFlag;
 import org.apache.rocketmq.remoting.common.RemotingUtil;
-
+/**
+ * NameServer数据的载体，记录broker、topic等信息
+ */
 public class RouteInfoManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
+    /** NameServer 与 Broker 空闲时长，默认2分钟，在2分钟内 Nameserver 没有收到 Broker 的心跳包，则关闭该连接 */
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
-    // topic消息队列路由信息，发送消息的时候根据路由表进行负载均衡
+    /**
+     * topic消息队列路由信息，发送消息的时候根据路由表进行负载均衡
+     * 主题与队列关系，记录一个主题的队列分布在哪些Broker上，每个Broker上存在该主题的队列个数
+     */
     private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
     // broker基础信息，包含brokerName、所属集群名称、主备broker地址
     private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
     // broker集群信息，存储集群中所有Broker名称
     private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
-    // broker状态信息，NameServer每次收到心跳时会替换该信息
+    /**
+     * broker状态信息，NameServer每次收到心跳时会替换该信息
+     * 当前存活的 Broker,该信息不是实时的，NameServer 每10S扫描一次所有的 broker,根据心跳包的时间得知 broker的状态，
+     * 该机制也是导致当一个 Broker 进程假死后，消息生产者无法立即感知，可能继续向其发送消息，导致失败（非高可用）
+     */
     private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
     // broker上的FilterServer列表，用于类模式消息过滤
     private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;

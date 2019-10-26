@@ -28,6 +28,7 @@ public class MQFaultStrategy {
 
     private boolean sendLatencyFaultEnable = false;
     /**  */
+    // 最大延迟时间数值，在消息发送之前，先记录当前时间（start），然后消息发送成功或失败时记录当前时间（end），(end-start)代表一次消息延迟时间，发送错误时，
     private long[] latencyMax = {50L, 100L, 550L, 1000L, 2000L, 3000L, 15000L};
     private long[] notAvailableDuration = {0L, 0L, 30000L, 60000L, 120000L, 180000L, 600000L};
 
@@ -58,8 +59,10 @@ public class MQFaultStrategy {
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
         // sendLatencyFaultEnable = false,默认为false
         // sendLatencyFaultEnable默认不启用Broker故障延迟机制
+        // sendLatencyFaultEnable，是否开启消息失败延迟规避机制，该值在消息发送者那里可以设置，如果该值为false,直接从 topic 的所有队列中选择下一个，而不考虑该消息队列是否可用（比如Broker挂掉）
         if (this.sendLatencyFaultEnable) {
             try {
+                // 使用了本地线程变量 ThreadLocal 保存上一次发送的消息队列下标，消息发送使用轮询机制获取下一个发送消息队列。
                 int index = tpInfo.getSendWhichQueue().getAndIncrement();
                 for (int i = 0; i < tpInfo.getMessageQueueList().size(); i++) {
                     int pos = Math.abs(index++) % tpInfo.getMessageQueueList().size();
@@ -67,7 +70,7 @@ public class MQFaultStrategy {
                         pos = 0;
                     // 根据对消息队列进行轮询获取到一个消息队列
                     MessageQueue mq = tpInfo.getMessageQueueList().get(pos);
-                    // 验证该消息队列是否可用
+                    // 验证该消息队列是否可用. 判断当前的消息队列是否可用
                     if (latencyFaultTolerance.isAvailable(mq.getBrokerName())) {
                         if (null == lastBrokerName || mq.getBrokerName().equals(lastBrokerName))
                             return mq;

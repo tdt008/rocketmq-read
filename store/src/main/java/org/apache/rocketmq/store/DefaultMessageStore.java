@@ -16,31 +16,7 @@
  */
 package org.apache.rocketmq.store;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.net.SocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileLock;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-import org.apache.rocketmq.common.BrokerConfig;
-import org.apache.rocketmq.common.MixAll;
-import org.apache.rocketmq.common.ServiceThread;
-import org.apache.rocketmq.common.SystemClock;
-import org.apache.rocketmq.common.ThreadFactoryImpl;
-import org.apache.rocketmq.common.UtilAll;
+import org.apache.rocketmq.common.*;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.message.MessageDecoder;
 import org.apache.rocketmq.common.message.MessageExt;
@@ -59,55 +35,70 @@ import org.apache.rocketmq.store.index.QueryOffsetResult;
 import org.apache.rocketmq.store.schedule.ScheduleMessageService;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.net.SocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileLock;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
+
 public class DefaultMessageStore implements MessageStore {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     
-    /** 消息存储配置属性 */
+    /** 消息存储配置属性.存储相关的配置，例如存储路径、commitLog文件大小，刷盘频次等等。 */
     private final MessageStoreConfig messageStoreConfig;
     
     // CommitLog
-    /** CommitLog文件的存储实现类 */
+    /** CommitLog文件的存储实现类.comitLog 的核心处理类，消息存储在 commitlog 文件中。 */
     private final CommitLog commitLog;
 
-    /** 消息队列存储缓存表，按消息主题分组 */
+    /** 消息队列存储缓存表，按消息主题分组. */
     private final ConcurrentMap<String/* topic */, ConcurrentMap<Integer/* queueId */, ConsumeQueue>> consumeQueueTable;
 
     /** 消息队列文件ConsumeQueue刷盘线程 */
     private final FlushConsumeQueueService flushConsumeQueueService;
 
-    /** 清除CommitLog文件服务接口类 */
+    /** 清除CommitLog文件服务接口类.commitLog 过期文件删除线程 */
     private final CleanCommitLogService cleanCommitLogService;
 
-    /** 清除ConsumeQueue文件服务接口类 */
+    /** 清除ConsumeQueue文件服务接口类. consumeQueue 过期文件删除线程 */
     private final CleanConsumeQueueService cleanConsumeQueueService;
 
-    /** 索引文件实现类 */
+    /** 索引文件实现类. 索引服务 */
     private final IndexService indexService;
 
-    /** MappedFile分配线程 */
+    /** MappedFile分配线程。 MappedFile 分配线程，RocketMQ 使用内存映射处理 commitlog、consumeQueue文件。*/
     private final AllocateMappedFileService allocateMappedFileService;
 
     /** CommitLog消息分发线程，根据CommitLog文件构建ConsumeQueue、IndexFile文件 */
+    /**  reput 转发线程（负责 Commitlog 转发到 Consumequeue、Index文件）。*/
     private final ReputMessageService reputMessageService;
 
-    /** 高可用机制 */
+    /** 高可用机制 . 主从同步实现服务。*/
     private final HAService haService;
 
+    /** 定时任务调度器，执行定时任务 */
     private final ScheduleMessageService scheduleMessageService;
-
+    /** 存储统计服务。 */
     private final StoreStatsService storeStatsService;
 
-    /** 消息堆内存缓存 */
+    /** 消息堆内存缓存. ByteBuffer池 */
     private final TransientStorePool transientStorePool;
 
+    /** 存储服务状态。 */
     private final RunningFlags runningFlags = new RunningFlags();
     private final SystemClock systemClock = new SystemClock();
 
     private final ScheduledExecutorService scheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("StoreScheduledThread"));
+    /** Broker 统计服务 */
     private final BrokerStatsManager brokerStatsManager;
     
-    /** 消息拉去长轮询模式消息到达监听器 */
+    /** 消息拉取长轮询模式消息到达监听器。 */
     private final MessageArrivingListener messageArrivingListener;
     
     /** broker配置 */
@@ -115,12 +106,13 @@ public class DefaultMessageStore implements MessageStore {
 
     private volatile boolean shutdown = true;
 
-    /** 文件刷盘检测 点 */
+    /** 文件刷盘检测点 */
     private StoreCheckpoint storeCheckpoint;
 
     private AtomicLong printTimes = new AtomicLong(0);
 
     /** CommitLog文件转发请求 */
+    /** 转发 comitlog 日志，主要是从 commitlog 转发到 consumeQueue、index 文件 */
     private final LinkedList<CommitLogDispatcher> dispatcherList;
 
     private RandomAccessFile lockFile;
@@ -426,20 +418,23 @@ public class DefaultMessageStore implements MessageStore {
             return new PutMessageResult(PutMessageStatus.PROPERTIES_SIZE_EXCEEDED, null);
         }
 
+        // 检测操作系统页写入是否繁忙
         if (this.isOSPageCacheBusy()) {
             return new PutMessageResult(PutMessageStatus.OS_PAGECACHE_BUSY, null);
         }
 
         long beginTime = this.getSystemClock().now();
-        // 写消息
+        // 写消息。将日志写入CommitLog文件
         PutMessageResult result = this.commitLog.putMessage(msg);
 
         long elapsedTime = this.getSystemClock().now() - beginTime;
         if (elapsedTime > 500) {
             log.warn("putMessage not in lock elapsed time(ms)={}, bodyLength={}", elapsedTime, msg.getBody().length);
         }
+        // 记录相关统计信息
         this.storeStatsService.setPutMessageEntireTimeMax(elapsedTime);
 
+        // 记录写commitlog 失败次数
         if (null == result || !result.isOk()) {
             this.storeStatsService.getPutMessageFailedTimes().incrementAndGet();
         }

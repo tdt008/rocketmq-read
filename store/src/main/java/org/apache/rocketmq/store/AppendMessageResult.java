@@ -46,6 +46,18 @@ public class AppendMessageResult {
         this(status, 0, 0, "", 0, 0, 0);
     }
 
+    /**
+ * @param status
+ * @param wroteOffset
+ * @param wroteBytes
+ * @param msgId
+ * @param storeTimestamp
+ * @param logicsOffset
+ * @param pagecacheRT
+     * @return
+     * @author qrc
+     * @date
+     */
     public AppendMessageResult(AppendMessageStatus status, long wroteOffset, int wroteBytes, String msgId,
         long storeTimestamp, long logicsOffset, long pagecacheRT) {
         this.status = status;

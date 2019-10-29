@@ -18,6 +18,16 @@ package org.apache.rocketmq.store;
 
 import com.sun.jna.NativeLong;
 import com.sun.jna.Pointer;
+import org.apache.rocketmq.common.UtilAll;
+import org.apache.rocketmq.common.constant.LoggerName;
+import org.apache.rocketmq.common.message.MessageExt;
+import org.apache.rocketmq.common.message.MessageExtBatch;
+import org.apache.rocketmq.logging.InternalLogger;
+import org.apache.rocketmq.logging.InternalLoggerFactory;
+import org.apache.rocketmq.store.config.FlushDiskType;
+import org.apache.rocketmq.store.util.LibC;
+import sun.nio.ch.DirectBuffer;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -31,15 +41,6 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import org.apache.rocketmq.common.UtilAll;
-import org.apache.rocketmq.common.constant.LoggerName;
-import org.apache.rocketmq.logging.InternalLogger;
-import org.apache.rocketmq.logging.InternalLoggerFactory;
-import org.apache.rocketmq.common.message.MessageExt;
-import org.apache.rocketmq.common.message.MessageExtBatch;
-import org.apache.rocketmq.store.config.FlushDiskType;
-import org.apache.rocketmq.store.util.LibC;
-import sun.nio.ch.DirectBuffer;
 
 public class MappedFile extends ReferenceResource {
     /** 操作系统每页大小，默认4K */
@@ -47,15 +48,18 @@ public class MappedFile extends ReferenceResource {
     protected static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
     /** 当前JVM实例中MappedFile虚拟内存 */
+    /** 类变量，所有 MappedFile 实例已使用字节总数 */
     private static final AtomicLong TOTAL_MAPPED_VIRTUAL_MEMORY = new AtomicLong(0);
 
     /** 当前JVM实例中MappedFile对象个数 */
     private static final AtomicInteger TOTAL_MAPPED_FILES = new AtomicInteger(0);
-    /** 当前该文件的写指针，从0开始（内存映射文件中的写指针） */
+    /** 当前该文件的写指针，从0开始（内存映射文件中的写指针）.当前MappedFile对象当前写指针。 */
     protected final AtomicInteger wrotePosition = new AtomicInteger(0);
     /** 当前文件的提交指针，如果开启transientStorePoolEnable，则数据会存储在TransientStorePool中，然后提交到内存映射ByteBuffer中，再刷写到磁盘 */
+    /** 当前提交的指针。 */
     protected final AtomicInteger committedPosition = new AtomicInteger(0);
     /** 刷写到磁盘指针，该指针之前的数据持久化到磁盘中 */
+    /** 当前刷写到磁盘的指针 */
     private final AtomicInteger flushedPosition = new AtomicInteger(0);
     /** 文件大小 */
     protected int fileSize;
@@ -64,6 +68,7 @@ public class MappedFile extends ReferenceResource {
     /**
      * Message will put to here first, and then reput to FileChannel if writeBuffer is not null.
      * 堆外内存ByteBuffer，如果不为空，数据首先将存储在该Buffer中，然后提交到MappedFile对应的内存映射文件ByteBuffer。TransientStorePoolEnable为true时不为空
+     * 如果开启了transientStorePoolEnable，消息会写入堆外内存，然后提交到 PageCache 并最终刷写到磁盘
      */
     protected ByteBuffer writeBuffer = null;
     /** 堆外内存池，该内存池中的内存会提供内存锁定机制。transientStorePoolEnable为true时启用 */
@@ -76,7 +81,7 @@ public class MappedFile extends ReferenceResource {
     private File file;
     /** 物理文件对应的内存映射Buffer */
     private MappedByteBuffer mappedByteBuffer;
-    /** 文件最后一次内容写入时间 */
+    /** 文件最后一次内容写入时间.最后一次存储时间戳 */
     private volatile long storeTimestamp = 0;
     /** 是否是MappedFileQueue队列中第一个文件 */
     private boolean firstCreateInQueue = false;
@@ -164,6 +169,9 @@ public class MappedFile extends ReferenceResource {
         this.transientStorePool = transientStorePool;
     }
 
+    /**
+     * 初始化 FileChannel、mappedByteBuffer 等
+     */
     private void init(final String fileName, final int fileSize) throws IOException {
         this.fileName = fileName;
         this.fileSize = fileSize;
@@ -228,9 +236,12 @@ public class MappedFile extends ReferenceResource {
             // 设置position为当前currentPos值
             byteBuffer.position(currentPos);
             AppendMessageResult result;
+            // 根据消息类型，是批量消息还是单个消息，进入相应的处理
             if (messageExt instanceof MessageExtBrokerInner) {
+                // 消息写入实现
                 result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, (MessageExtBrokerInner) messageExt);
             } else if (messageExt instanceof MessageExtBatch) {
+                // 消息写入实现
                 result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, (MessageExtBatch) messageExt);
             } else {
                 return new AppendMessageResult(AppendMessageStatus.UNKNOWN_ERROR);
